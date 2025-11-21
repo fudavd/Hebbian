@@ -27,12 +27,11 @@ def main():
         'Model': [(28, 28), (64, 3), (64, 3), (64, 3), (64, 3)],
         'device': 'cuda',
         'dataset': 'Omniglot',
-        'repetitions': 30,
     }
 
     # Initialize logger
     logger = TrainingLogger(
-        log_dir=F"./results/huh/N-{config['n_classes']}:K-{config['n_shots']}/{rep}",
+        log_dir=F"./results/{config['dataset']}/N-{config['n_classes']}:K-{config['n_shots']}/{rep}",
         experiment_name=f"run_{rep}",
     )
 
