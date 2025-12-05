@@ -1,4 +1,6 @@
-from src.maml import MetaMaml
+import numpy as np
+
+from src.mamlre import MetaMamlRe
 from src.networks import ConvNet
 from src.utils import TrainingLogger, get_dataset, split_dataset_by_class
 from tqdm import tqdm
@@ -24,7 +26,7 @@ def main():
         'n_query': 15,
         'meta_epochs': 10000,
         'meta_learning_rate': 1e-3,
-        'inner_learning_rate': 5e-1,
+        'inner_learning_rate': 1e-1,
         'meta_batch_size': 4 if dataset in ['MiniImageNet', 'CUB200'] else 32,
         'Model': [(28, 28), (64, 3), (64, 3), (64, 3), (64, 3)],
         'device': 'cuda',
@@ -33,7 +35,7 @@ def main():
 
     # Initialize logger
     logger = TrainingLogger(
-        log_dir=F"./results/{config['dataset']}/MAML/N-{config['n_classes']}:K-{config['n_shots']}/{rep}",
+        log_dir=F"./results/{config['dataset']}/MAML-r/N-{config['n_classes']}:K-{config['n_shots']}/{rep}",
         experiment_name=f"run_{rep}",
     )
 
@@ -47,7 +49,7 @@ def main():
         bias=True,
         device=config['device'],
     )
-    meta_model = MetaMaml(
+    meta_model = MetaMamlRe(
         model,
         n_classes=config['n_classes'],
         n_shots=config['n_shots'],
@@ -55,7 +57,7 @@ def main():
         input_size= (3,84,84) if dataset in ['MiniImageNet', 'CUB200'] else (1, 28, 28),
     )
     optimizer = torch.optim.Adam(
-        list(meta_model.net.parameters()) + list(meta_model.head.parameters()),
+        meta_model.net.parameters(),
         lr=config['meta_learning_rate']
     )
 
