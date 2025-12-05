@@ -2,14 +2,14 @@ import torch
 import torch.nn as nn
 
 class ConvNet(nn.Module):
-    def __init__(self, layers, bias=True, device=None):
+    def __init__(self, layers, input_channels =1, bias=True, device=None):
         super().__init__()
         self.name = "ConvNet"
         self.bias = bias
         self.layers_config = layers
         self.device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        in_channels = 1
+        in_channels = input_channels
         conv_blocks = []
         for num_filters, fsize in layers[1:]:
             block = nn.Sequential(
@@ -31,8 +31,9 @@ class ConvNet(nn.Module):
         elif X.ndim != 4:
             raise ValueError(f"Expected input of shape (N,H,W,C), got {X.shape}")
         # Convert (N,H,W,C) → (N,C,H,W)
-        if X.shape[1] != 1:  # if channel not first
-            X = X.permute(0, 3, 1, 2).contiguous().to(self.device)
+        #if X.shape[1] != 1:  # if channel not first
+            #X = X.permute(0, 3, 1, 2).contiguous().to(self.device)
+        X = X.to(self.device)
         out = self.layers(X)
         return out.flatten(1)
 

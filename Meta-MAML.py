@@ -11,9 +11,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--rep", type=int, required=True,)
     parser.add_argument("--shots", type=int, required=True)
+    parser.add_argument("--dataset", type=str, required=True)
     args = parser.parse_args()
     rep = args.rep
     shots = args.shots
+    dataset = args.dataset
 
     # Experiment configuration
     config = {
@@ -22,11 +24,11 @@ def main():
         'n_query': 15,
         'meta_epochs': 10000,
         'meta_learning_rate': 1e-3,
-        'inner_learning_rate': 1e-2,
-        'meta_batch_size': 32,
+        'inner_learning_rate': 5e-1,
+        'meta_batch_size': 4 if dataset in ['MiniImageNet', 'CUB200'] else 32,
         'Model': [(28, 28), (64, 3), (64, 3), (64, 3), (64, 3)],
         'device': 'cuda',
-        'dataset': 'Omniglot',
+        'dataset': dataset,
     }
 
     # Initialize logger
@@ -41,6 +43,7 @@ def main():
     # Model setup
     model = ConvNet(
         layers=config['Model'],
+        input_channels= 3 if dataset in ['MiniImageNet', 'CUB200'] else 1,
         bias=True,
         device=config['device'],
     )
@@ -49,6 +52,7 @@ def main():
         n_classes=config['n_classes'],
         n_shots=config['n_shots'],
         lr_inner=config['inner_learning_rate'],
+        input_size= (3,84,84) if dataset in ['MiniImageNet', 'CUB200'] else (1, 28, 28),
     )
     optimizer = torch.optim.Adam(
         list(meta_model.net.parameters()) + list(meta_model.head.parameters()),

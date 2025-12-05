@@ -14,7 +14,6 @@ import numpy as np
 import torch
 import torchvision
 from torchvision.transforms import transforms
-from torch.utils.data import ConcatDataset
 
 
 def get_project_root() -> Path:
@@ -88,15 +87,36 @@ class AugmentWithRotations(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         return self.data[idx], self.targets[idx]
 
+def LoadDataFolder(path='./data', transform=None):
+    dset = torchvision.datasets.ImageFolder(root=path, transform=transform)
+
+    class WrappedDataset(torch.utils.data.Dataset):
+        def __init__(self, dset):
+            self.data = np.array([p for p, _ in dset.samples])
+            self.targets = torch.tensor(dset.targets)
+            self.samples = dset.samples
+            self.classes = dset.classes
+            self.class_to_idx = dset.class_to_idx
+            self.loader = dset.loader
+            self.transform = dset.transform
+
+        def __len__(self):
+            return len(self.data)
+
+        def __getitem__(self, idx):
+            img = self.loader(self.data[idx])
+            if self.transform:
+                img = self.transform(img)
+            return img, self.targets[idx]
+
+    return WrappedDataset(dset)
 
 
 dataset_map = {
     'MNIST': torchvision.datasets.MNIST,
-    'FashionMNIST': torchvision.datasets.FashionMNIST,
-    'CIFAR10': torchvision.datasets.CIFAR10,
-    'CIFAR100': torchvision.datasets.CIFAR100,
     'Omniglot': torchvision.datasets.Omniglot,
     'MiniImageNet': None,  # Placeholder, handled separately below
+    'CUB200': None,
 }
 def get_dataset(name: str):
 
@@ -108,19 +128,18 @@ def get_dataset(name: str):
     # === Normalization values per dataset ===
     norm_values = {
         'MNIST': ((0.1307,), (0.3081,)),
-        'FashionMNIST': ((0.2860,), (0.3530,)),
-        'CIFAR10': ((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-        'CIFAR100': ((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
         'Omniglot': ((0.5,), (0.5,)),
         'MiniImageNet': ((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+        'CUB200': ((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     }
 
     mean, std = norm_values[name]
-    transform = transforms.Compose([
-        transforms.Resize((84, 84)) if name == 'MiniImageNet' else transforms.Resize((28, 28)),
+    transform_list = [
+        transforms.Resize((84, 84)) if name in ['MiniImageNet', 'CUB200'] else transforms.Resize((28, 28)),
         transforms.ToTensor(),
         transforms.Normalize(mean, std),
-    ])
+    ]
+    transform = transforms.Compose(transform_list)
 
     # === Load dataset ===
     if name == 'Omniglot':
@@ -137,11 +156,11 @@ def get_dataset(name: str):
     elif name == 'MiniImageNet':
         # MiniImageNet is not included in torchvision.
         # Expect data in ./data/mini-imagenet/train/ and ./data/mini-imagenet/val/
-        train_dataset = torchvision.datasets.ImageFolder(
-            root='./data/mini-imagenet/train', transform=transform)
-        test_dataset = torchvision.datasets.ImageFolder(
-            root='./data/mini-imagenet/val', transform=transform)
-
+        train_dataset = LoadDataFolder(path='./data/mini-imagenet/train', transform=transform)
+        test_dataset = LoadDataFolder(path='./data/mini-imagenet/val', transform=transform)
+    elif name == 'CUB200':
+        train_dataset = LoadDataFolder(path='./data/CUB_200/train', transform=transform)
+        test_dataset = LoadDataFolder(path='./data/CUB_200/test', transform=transform)
     else:
         dataset_class = dataset_map[name]
         train_dataset = dataset_class(root='./data', train=True, transform=transform, download=True)
@@ -170,7 +189,6 @@ def split_dataset_by_class(dataset, n_meta_train_classes=5, n_meta_val_classes=5
     labels = np.array(dataset.targets)
     all_classes = np.unique(labels)
 
-    # np.random.seed(42)  # for reproducibility
     np.random.shuffle(all_classes)
 
     meta_train_classes = all_classes[:n_meta_train_classes]
