@@ -45,8 +45,10 @@ class MetaMaml(nn.Module):
         # === Fast adaptation ===
         for step in range(5):
             imgs = torch.stack([img.to(self.device) for img, _ in support_set])
-            labels = torch.tensor([label for _, label in support_set]).to(self.device)
-            labels = torch.tensor([label_map[l.item()] for l in labels]).to(self.device)
+            labels = torch.tensor(
+                [label_map[int(label)] for _, label in support_set],
+                device=self.device
+            )
 
             # Forward with current fast weights
             features = functional_call(self.net, fast_weights, (imgs,))
@@ -89,8 +91,10 @@ class MetaMaml(nn.Module):
 
         # === Calculate meta-loss ===
         imgs = torch.stack([img.to(self.device) for img, _ in query_set])
-        label = torch.tensor([label for _, label in query_set]).to(self.device)
-        label = torch.tensor([label_map[l.item()] for l in label]).to(self.device)
+        label = torch.tensor(
+            [label_map[int(label)] for _, label in query_set],
+            device=self.device
+        )
 
         features = functional_call(self.net, fast_weights, (imgs,))
         outputs = functional_call(self.head, fast_head, (features,))
@@ -101,18 +105,25 @@ class MetaMaml(nn.Module):
         return query_loss, query_accuracy
 
     def get_support_and_query(self, dataset):
-        unique_labels = np.unique(dataset.targets)
+        # Ensure targets are numpy ints
+        targets = dataset.targets
+        if isinstance(targets, torch.Tensor):
+            targets = targets.cpu().numpy()
+        unique_labels = np.unique(targets)
         unique_labels = np.random.permutation(unique_labels)
+
         support_set, query_set = [], []
         for c in unique_labels:
-            one_class_set = select_class_set(dataset, [c])
+            one_class_set = select_class_set(dataset, [int(c)])  # pass plain int
             indices = np.random.randint(0, len(one_class_set), self.n_shots + self.n_query)
             for i_shot in range(self.n_shots):
                 img, label = one_class_set[indices[i_shot]]
                 support_set.append((img, label))
             for i_meta in range(self.n_query):
                 query_set.append(one_class_set[indices[self.n_shots + i_meta]])
-        label_map = {c.item(): i for i, c in enumerate(unique_labels)}
+
+        # Make label_map from plain ints
+        label_map = {int(c): i for i, c in enumerate(unique_labels)}
         return (support_set, query_set), label_map
 
 
@@ -129,8 +140,10 @@ class MetaMaml(nn.Module):
         # === Fast adaptation ===
         for step in range(5):
             imgs = torch.stack([img.to(self.device) for img, _ in support_set])
-            labels = torch.tensor([label for _, label in support_set]).to(self.device)
-            labels = torch.tensor([label_map[l.item()] for l in labels]).to(self.device)
+            labels = torch.tensor(
+                [label_map[int(label)] for _, label in support_set],
+                device=self.device
+            )
 
             # Forward with current fast weights
             features = functional_call(self.net, fast_weights, (imgs,))
@@ -177,7 +190,7 @@ class MetaMaml(nn.Module):
         with torch.no_grad():
             for img, label in test_set:
                 img = img.to(self.device)
-                local_label = label_map[label.item()]
+                local_label = label_map[label]
                 output = functional_call(self.net, fast_weights, (img,))
                 output = functional_call(self.head, fast_head, (output,))
                 loss += F.cross_entropy(output, torch.tensor([local_label]).to(self.device)).item()/len(test_set)

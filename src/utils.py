@@ -317,14 +317,20 @@ class TrainingLogger:
         """Save training history to CSV"""
         csv_path = os.path.join(self.log_dir, "training_history.csv")
 
-        # Create DataFrame from history
+        # Helper to convert tensors to CPU scalars
+        def to_scalar(x):
+            if isinstance(x, torch.Tensor):
+                return x.cpu().item()
+            return x
+
+        # Convert main history entries
         df_data = {
             'meta_epoch': self.history['meta_epoch'],
-            'loss': self.history['loss'],
-            'accuracy': self.history['accuracy'],
-            'val_loss': self.history['val_loss'],
-            'val_acc': self.history['val_acc'],
-            'learning_rate': self.history['learning_rate'],
+            'loss': [to_scalar(x) for x in self.history['loss']],
+            'accuracy': [to_scalar(x) for x in self.history['accuracy']],
+            'val_loss': [to_scalar(x) for x in self.history['val_loss']],
+            'val_acc': [to_scalar(x) for x in self.history['val_acc']],
+            'learning_rate': [to_scalar(x) for x in self.history['learning_rate']],
             'timestamp': self.history['timestamp']
         }
 
@@ -334,7 +340,7 @@ class TrainingLogger:
                 col_name = f"grad_{param_name.replace('.', '_')}"
                 if col_name not in df_data:
                     df_data[col_name] = [0.0] * len(self.history['meta_epoch'])
-                df_data[col_name][epoch_idx] = norm
+                df_data[col_name][epoch_idx] = to_scalar(norm)
 
         df = pd.DataFrame(df_data)
         df.to_csv(csv_path, index=False)
