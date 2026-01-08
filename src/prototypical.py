@@ -35,13 +35,13 @@ class MetaProto(nn.Module):
                 emb = self.net(img.to(self.device))
                 embeddings[i_shot] = emb
             # Compute the prototype for this class
-            proto_embeddings[label_map[label]] = torch.mean(embeddings, dim=0)
+            proto_embeddings[label_map[int(label)]] = torch.mean(embeddings, dim=0)
 
         proto_vecs = proto_embeddings  # directly use prototypes
 
         # === Compute query embeddings and distances ===
         imgs_q = torch.stack([img.to(self.device) for img, _ in query_set])
-        labels_q = torch.tensor([label_map[label] for _, label in query_set], device=self.device)
+        labels_q = torch.tensor([label_map[int(label)] for _, label in query_set], device=self.device)
 
         emb_q = self.net(imgs_q)  # shape [n_classes * n_query, feature_dim]
 
@@ -101,7 +101,7 @@ class MetaProto(nn.Module):
                 for img, label in test_set:
                     img = img.to(self.device)
                     emb = self.net(img)
-                    local_label = label_map[label]
+                    local_label = label_map[int(label)]
                     dists = torch.cdist(emb, prototypes, p=2)
                     logits = - (dists ** 2)
                     loss += F.cross_entropy(logits, torch.tensor([local_label]).to(self.device)).item() / len(test_set)

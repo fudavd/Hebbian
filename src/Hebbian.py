@@ -237,7 +237,7 @@ class MetaHebbian(nn.Module):
                 img, label = support_set[c*self.n_shots + i_shot]
                 emb = self.net(img.to(self.device))
                 embeddings[i_shot] = emb
-            proto_embeddings[label_map[label]] = torch.mean(embeddings, dim=0)
+            proto_embeddings[label_map[int(label)]] = torch.mean(embeddings, dim=0)
         proto_mu = torch.mean(proto_embeddings, dim=0)
         proto_vecs = torch.linalg.norm(proto_embeddings - proto_mu, dim=1)
         proto_vecs = (proto_embeddings - proto_mu) / proto_vecs[:, np.newaxis]
@@ -260,35 +260,39 @@ class MetaHebbian(nn.Module):
         # === Query evaluation (differentiable meta loss) ===
         weights = head.output_weights
         imgs = torch.stack([img.to(self.device) for img, _ in query_set])
-        labels = torch.tensor([label for _, label in query_set]).to(self.device)
-        labels = torch.tensor([label_map[l.item()] for l in labels]).to(self.device)
+        labels_q = torch.tensor([label_map[int(label)] for _, label in query_set], device=self.device)
 
         query_emb = self.net(imgs)
         # Get Hebbian "logits" in torch form
         outputs = query_emb @ weights.T
         # Differentiable loss
-        query_loss = F.cross_entropy(outputs, labels)
-        query_accuracy = (torch.argmax(outputs, dim=1) == labels).float().mean()
+        query_loss = F.cross_entropy(outputs, labels_q)
+        query_accuracy = (torch.argmax(outputs, dim=1) == labels_q).float().mean()
 
         # validation_loss, validation_accuracy = self.validation(val_dataset)
         return query_loss, query_accuracy
 
     def get_support_and_query(self, dataset):
-        unique_labels = np.unique(dataset.targets)
+        # Ensure targets are numpy ints
+        targets = dataset.targets
+        if isinstance(targets, torch.Tensor):
+            targets = targets.cpu().numpy()
+        unique_labels = np.unique(targets)
         unique_labels = np.random.permutation(unique_labels)
+
         support_set, query_set = [], []
         for c in unique_labels:
-            one_class_set = select_class_set(dataset, [c])
+            one_class_set = select_class_set(dataset, [int(c)])  # pass plain int
             indices = np.random.randint(0, len(one_class_set), self.n_shots + self.n_query)
             for i_shot in range(self.n_shots):
                 img, label = one_class_set[indices[i_shot]]
                 support_set.append((img, label))
             for i_meta in range(self.n_query):
                 query_set.append(one_class_set[indices[self.n_shots + i_meta]])
-        label_map = {c.item(): i for i, c in enumerate(unique_labels)}
 
+        # Make label_map from plain ints
+        label_map = {int(c): i for i, c in enumerate(unique_labels)}
         return (support_set, query_set), label_map
-
 
     def validation(self, validation_dataset):
         """
@@ -307,7 +311,7 @@ class MetaHebbian(nn.Module):
                     img, label = support_set[c * self.n_shots + i_shot]
                     emb = self.net(img.to(self.device))
                     embeddings[i_shot] = emb
-                proto_embeddings[label_map[label]] = torch.mean(embeddings, dim=0)
+                proto_embeddings[label_map[int(label)]] = torch.mean(embeddings, dim=0)
             proto_mu = torch.mean(proto_embeddings, dim=0)
             proto_vecs = torch.linalg.norm(proto_embeddings - proto_mu, dim=1)
             proto_vecs = (proto_embeddings - proto_mu) / proto_vecs[:, np.newaxis]
@@ -336,7 +340,7 @@ class MetaHebbian(nn.Module):
             loss = 0.0
             for img, label in test_set:
                 img = img.to(self.device)
-                local_label = label_map[label]
+                local_label = label_map[int(label)]
                 query_emb = self.net(img)
                 output = torch.tanh(query_emb @ weights.T)
                 loss += F.cross_entropy(output, torch.tensor([local_label]).to(self.device)).item() / len(test_set)
